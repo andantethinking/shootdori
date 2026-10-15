@@ -1,0 +1,618 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>승률계산기</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: 한 손으로 보는 모바일 앱 셸 — 상단 고정 탭, 720px 단일 컬럼, 조끼색(핑크/블루)이 곧 팀 색 */
+:root{
+  --bg:#F2F4F8; --surface:#FFFFFF; --sunk:#E8ECF2; --ink:#121826; --muted:#5A6375; --line:#DCE1E9;
+  --pink:#D93D74; --pink-soft:#FBE3EC; --blue:#2C66D8; --blue-soft:#E0EAFB;
+  --win:#16865A; --win-soft:#DDF2E8; --draw:#7B8496; --draw-soft:#E9ECF1; --loss:#C9443B; --loss-soft:#F8E1DF;
+  --gold:#B7861B;
+  --display:"Black Han Sans","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --body:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --r:14px;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0D1118; --surface:#161C27; --sunk:#1E2532; --ink:#E8ECF3; --muted:#97A0B2; --line:#2A3242;
+  --pink:#FF6B9E; --pink-soft:#3A1A28; --blue:#6A9BFF; --blue-soft:#18264A;
+  --win:#3CC489; --win-soft:#123326; --draw:#9AA3B5; --draw-soft:#252C39; --loss:#FF7A70; --loss-soft:#3A1C1A;
+  --gold:#E2B54A; color-scheme:dark }}
+:root[data-theme="dark"]{
+  --bg:#0D1118; --surface:#161C27; --sunk:#1E2532; --ink:#E8ECF3; --muted:#97A0B2; --line:#2A3242;
+  --pink:#FF6B9E; --pink-soft:#3A1A28; --blue:#6A9BFF; --blue-soft:#18264A;
+  --win:#3CC489; --win-soft:#123326; --draw:#9AA3B5; --draw-soft:#252C39; --loss:#FF7A70; --loss-soft:#3A1C1A;
+  --gold:#E2B54A; color-scheme:dark }
+
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.num{font-variant-numeric:tabular-nums}
+
+/* 헤더 */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:10;background:var(--bg);border-bottom:1px solid var(--line)}
+.wrap{max-width:720px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.brand{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-block:14px 10px}
+.brand h1{margin:0;font-family:var(--display);font-weight:400;font-size:24px;letter-spacing:.01em;line-height:1.1;display:flex;align-items:center;gap:10px}
+.bib{display:inline-flex;width:22px;height:22px;border-radius:6px;overflow:hidden;transform:rotate(-8deg)}
+.bib i{flex:1}.bib i:first-child{background:var(--pink)}.bib i:last-child{background:var(--blue)}
+.brand small{display:block;font-family:var(--body);font-size:12px;color:var(--muted);font-weight:500;letter-spacing:.02em;margin-top:3px}
+.status{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:4px 10px;border-radius:999px;background:var(--sunk);color:var(--muted);white-space:nowrap}
+.pill .dot{width:7px;height:7px;border-radius:50%;background:var(--draw)}
+.pill.live .dot{background:var(--win)} .pill.warn{background:var(--loss-soft);color:var(--loss)} .pill.warn .dot{background:var(--loss)}
+.iconbtn{border:1px solid var(--line);background:var(--surface);border-radius:999px;width:32px;height:32px;display:grid;place-items:center;cursor:pointer}
+.iconbtn svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2}
+.iconbtn.spin svg{animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.tabs{display:flex;gap:4px}
+.tab{flex:1;border:0;background:none;padding:10px 4px 12px;font-weight:600;color:var(--muted);cursor:pointer;position:relative;font-size:15px}
+.tab[aria-selected="true"]{color:var(--ink)}
+.tab[aria-selected="true"]::after{content:"";position:absolute;left:18%;right:18%;bottom:-1px;height:3px;border-radius:3px 3px 0 0;background:var(--ink)}
+
+main.wrap{padding-block:18px 48px;display:grid;gap:16px}
+.view{display:grid;gap:16px;min-width:0}
+.view>*{min-width:0}
+h3{margin:0;font-size:13px;font-weight:700;color:var(--muted);letter-spacing:.04em}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;min-width:0}
+.note{font-size:12.5px;color:var(--muted);margin:0}
+
+/* 선수 찾기 */
+.pick{display:grid;gap:8px;grid-template-columns:minmax(0,1fr)}
+.pickrow{display:flex;gap:8px}
+.field{flex:1;min-width:0;width:100%;border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:11px 14px;font-size:16px}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:0 14px;font-weight:600;font-size:14px;cursor:pointer;white-space:nowrap}
+.btn.on{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 12px;font-size:14px;cursor:pointer}
+.chip:hover{border-color:var(--ink)}
+
+/* 선수 카드 */
+.hero{position:relative;overflow:hidden;padding:20px 18px 18px}
+.hero::before{content:"";position:absolute;inset:0 0 auto auto;width:150px;height:150px;transform:translate(48px,-56px) rotate(24deg);background:linear-gradient(90deg,var(--pink) 0 50%,var(--blue) 50% 100%);opacity:.14;border-radius:24px}
+.hero-name{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;position:relative}
+.hero-name h2{margin:0;font-family:var(--display);font-weight:400;font-size:clamp(30px,8vw,40px);line-height:1.05;letter-spacing:.01em;word-break:keep-all}
+.mine{font-size:12px;font-weight:700;color:var(--gold)}
+.hero-sub{margin:6px 0 0;color:var(--muted);font-size:13.5px;position:relative}
+.hero-sub b{color:var(--ink)}
+.tiles{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin-top:16px;position:relative}
+.tile{background:var(--sunk);border-radius:12px;padding:10px 8px;text-align:center}
+.tile b{display:block;font-family:var(--display);font-weight:400;font-size:24px;line-height:1.15}
+.tile span{font-size:12px;color:var(--muted);font-weight:600}
+.tile.key{background:var(--ink);color:var(--surface)} .tile.key span{color:inherit;opacity:.75}
+@media (max-width:480px){.tiles{grid-template-columns:repeat(4,minmax(0,1fr))}.tile.key{grid-column:span 4;display:flex;align-items:baseline;justify-content:center;gap:10px}.tile b{font-size:21px}}
+.wdl{margin-top:16px;display:grid;gap:6px}
+.bar{display:flex;height:10px;border-radius:99px;overflow:hidden;background:var(--sunk);gap:2px}
+.bar i{display:block;height:100%}
+.bar .w{background:var(--win)}.bar .d{background:var(--draw)}.bar .l{background:var(--loss)}
+.bar .a{background:var(--pink)}.bar .b{background:var(--blue)}
+.legend{display:flex;gap:14px;font-size:13px;color:var(--muted);flex-wrap:wrap}
+.legend b{color:var(--ink);font-weight:700}
+.minor{display:flex;flex-wrap:wrap;gap:6px 16px;margin:14px 0 0;font-size:13px;color:var(--muted)}
+.minor b{color:var(--ink)}
+
+.res{display:inline-grid;place-items:center;min-width:28px;height:28px;padding:0 6px;border-radius:8px;font-weight:700;font-size:13px}
+.res.W{background:var(--win-soft);color:var(--win)} .res.D{background:var(--draw-soft);color:var(--draw)} .res.L{background:var(--loss-soft);color:var(--loss)}
+.form{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+
+.split{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.side{border-radius:12px;padding:12px}
+.side.A{background:var(--pink-soft)} .side.B{background:var(--blue-soft)}
+.side .lab{font-weight:700;font-size:13px}
+.side.A .lab{color:var(--pink)} .side.B .lab{color:var(--blue)}
+.side .rec{font-family:var(--display);font-size:20px;margin-top:2px}
+.side .sm{font-size:12px;color:var(--muted)}
+
+.log{list-style:none;margin:10px 0 0;padding:0;display:grid}
+.log li{display:grid;grid-template-columns:52px 1fr auto;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+.log li:first-child{border-top:0}
+.log .when{font-size:12px;color:var(--muted);line-height:1.3}
+.log .when b{display:block;color:var(--ink);font-size:13px}
+.log .mid{min-width:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.vest{font-size:12px;font-weight:700;padding:2px 8px;border-radius:999px}
+.vest.A{background:var(--pink-soft);color:var(--pink)} .vest.B{background:var(--blue-soft);color:var(--blue)}
+.sc{font-weight:700}
+.badge{font-size:11.5px;font-weight:700;padding:2px 7px;border-radius:6px;background:var(--sunk);color:var(--ink)}
+.badge.mom{background:var(--gold);color:var(--surface)}
+.badge.warn{background:var(--loss-soft);color:var(--loss)}
+
+/* 순위 */
+.leaders{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(138px,1fr);gap:8px;overflow-x:auto;padding-bottom:4px;scrollbar-width:thin}
+.lead{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px;text-align:left;cursor:pointer}
+.lead .k{font-size:12px;color:var(--muted);font-weight:600}
+.lead .n{font-family:var(--display);font-size:20px;margin-top:4px;line-height:1.15;word-break:keep-all}
+.lead .v{font-size:13px;font-weight:700}
+.lead .more{font-size:11.5px;color:var(--muted)}
+.controls{display:grid;gap:10px}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 13px;font-size:14px;font-weight:600;cursor:pointer;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--surface)}
+.row2{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.row2 .field{padding:9px 12px;font-size:15px}
+.row2 select{border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:9px 10px}
+.tablebox{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
+table{border-collapse:collapse;width:100%;min-width:520px;font-size:14px}
+th,td{padding:10px 8px;text-align:right;white-space:nowrap}
+th{font-size:12px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--surface)}
+td{border-bottom:1px solid var(--line)}
+tr:last-child td{border-bottom:0}
+th:nth-child(1),td:nth-child(1){text-align:center;width:44px}
+th:nth-child(2),td:nth-child(2){text-align:left}
+tbody tr{cursor:pointer} tbody tr:hover td{background:var(--sunk)}
+td.hl,th.hl{color:var(--ink);font-weight:700}
+.rk{font-family:var(--display);font-size:16px}
+.rk.t1{color:var(--gold)}
+tr.me td{background:var(--sunk)}
+.empty{padding:28px 16px;text-align:center;color:var(--muted)}
+
+/* 경기 */
+.sum{display:grid;gap:10px}
+.sumrow{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.big3{display:flex;gap:16px;align-items:baseline;flex-wrap:wrap}
+.big3 span{font-size:13px;color:var(--muted);font-weight:600}
+.big3 b{font-family:var(--display);font-weight:400;font-size:26px;margin-left:4px}
+.big3 .A b{color:var(--pink)} .big3 .B b{color:var(--blue)}
+.games{display:grid;gap:10px}
+details.game{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+details.game summary{list-style:none;cursor:pointer;padding:14px 16px;display:grid;gap:8px}
+details.game summary::-webkit-details-marker{display:none}
+.gmeta{display:flex;justify-content:space-between;font-size:12.5px;color:var(--muted);gap:8px}
+.gmeta b{color:var(--ink)}
+.board{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px}
+.board .t{font-weight:700;font-size:14px;display:flex;align-items:center;gap:6px}
+.board .t.A{color:var(--pink)} .board .t.B{color:var(--blue);justify-content:flex-end}
+.board .t .crown{font-size:11px;font-weight:700;padding:1px 6px;border-radius:5px;background:currentColor}
+.board .t .crown span{color:var(--surface)}
+.digits{font-family:var(--display);font-size:30px;line-height:1;display:flex;gap:10px;align-items:center}
+.digits .lose{color:var(--muted)}
+.digits i{font-style:normal;color:var(--muted);font-size:22px}
+.gfoot{font-size:12.5px;color:var(--muted);display:flex;gap:4px 12px;flex-wrap:wrap}
+.gfoot b{color:var(--ink);font-weight:600}
+.lineups{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 16px 16px}
+.lineups ul{list-style:none;margin:0;padding:10px 12px;border-radius:12px;display:grid;gap:4px;font-size:14px}
+.lineups .A{background:var(--pink-soft)} .lineups .B{background:var(--blue-soft)}
+.lineups li{display:flex;justify-content:space-between;gap:6px}
+.lineups li button{border:0;background:none;padding:0;cursor:pointer;text-align:left}
+.lineups li button:hover{text-decoration:underline}
+.lineups .guest{color:var(--muted);text-decoration:underline dotted;text-underline-offset:3px}
+.lineups .hd{font-size:12px;font-weight:700;margin-bottom:2px}
+.lineups .A .hd{color:var(--pink)} .lineups .B .hd{color:var(--blue)}
+.gl{font-size:12px;font-weight:700}
+.foot{font-size:12px;color:var(--muted);text-align:center;padding-top:8px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand">
+      <h1><span class="bib" aria-hidden="true"><i></i><i></i></span><span>승률계산기<small id="season">시즌 개인 기록</small></span></h1>
+      <div class="status">
+        <span class="pill" id="pill"><span class="dot"></span><span id="pillText">불러오는 중</span></span>
+        <button class="iconbtn" id="refresh" type="button" aria-label="새로고침"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg></button>
+      </div>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button class="tab" role="tab" id="tab-me" data-tab="me" aria-selected="false">개인 기록</button>
+      <button class="tab" role="tab" id="tab-rank" data-tab="rank" aria-selected="true">전체 순위</button>
+      <button class="tab" role="tab" id="tab-games" data-tab="games" aria-selected="false">경기 결과</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="view" id="view-me" hidden>
+    <div class="pick">
+      <label for="who"><h3>선수 찾기</h3></label>
+      <div class="pickrow">
+        <input class="field" id="who" list="names" placeholder="카페 닉네임 입력" autocomplete="off" enterkeyhint="search">
+        <button class="btn" id="pin" type="button">내 이름으로 저장</button>
+      </div>
+      <datalist id="names"></datalist>
+    </div>
+    <div id="meBody" class="view"></div>
+  </section>
+
+  <section class="view" id="view-rank">
+    <div class="leaders" id="leaders"></div>
+    <div class="controls">
+      <div class="seg" id="sortSeg" role="group" aria-label="정렬 기준">
+        <button type="button" data-k="pts" aria-pressed="true">승점</button>
+        <button type="button" data-k="g" aria-pressed="false">득점</button>
+        <button type="button" data-k="wr" aria-pressed="false">승률</button>
+        <button type="button" data-k="mom" aria-pressed="false">MOM</button>
+        <button type="button" data-k="gp" aria-pressed="false">출전</button>
+      </div>
+      <div class="row2">
+        <input class="field" id="q" placeholder="이름으로 찾기" autocomplete="off" style="flex:1;min-width:140px">
+        <label class="note" for="minGp">최소 출전</label>
+        <select id="minGp"><option value="1">1경기</option><option value="5">5경기</option><option value="10">10경기</option></select>
+      </div>
+    </div>
+    <div class="tablebox"><table id="rankTable"><thead></thead><tbody></tbody></table></div>
+    <p class="note">승점 = 승 3점 · 무 1점 · 패 0점. 승률 = 승 ÷ (승+패), 무승부는 계산에서 빠집니다. 줄을 누르면 그 선수의 기록이 열립니다.</p>
+  </section>
+
+  <section class="view" id="view-games" hidden>
+    <div class="card sum" id="gsum"></div>
+    <div class="games" id="glist"></div>
+  </section>
+
+  <p class="foot" id="foot"></p>
+</main>
+
+<script id="snapshot" type="application/json">{"Members":[["Memver_id","활성(Y/N)"],["자나","Y"],["찬스","N"],["타로","Y"],["음주가무","Y"],["제라드","Y"],["스테이(stay)","N"],["쵸비","N"],["다니엘","Y"],["꾸룩이","Y"],["내사랑필이","Y"],["카이","Y"],["기리","Y"],["몽키매직","N"],["리오타","Y"],["3232","Y"],["우영","Y"],["그림자호수","Y"],["도형","Y"],["재민","Y"],["샤인","Y"],["토토로","Y"],["체리(chary)","Y"],["기돌","Y"],["이수댁","Y"],["짱짱","N"],["브페","Y"],["라파","N"],["엠구","Y"],["끼끼","Y"],["도또","N"],["이루방","Y"],["도도리","Y"],["백호","Y"],["sean","Y"],["쭌킴","Y"],["코모","Y"],["폭주기관차","Y"],["양필봉","Y"],["치즈","Y"],["산이","N"],["정신","Y"],["타잔","Y"],["매쉬","Y"],["진이","Y"],["준형","Y"],["아라머해","Y"],["Din_K","N"],["하루","Y"],["싸비","Y"],["진짜사나이","Y"],["아이완","Y"],["잭슨","Y"],["저스틴","Y"],["골넣고잠","Y"],["구공","Y"],["이리","Y"],["길미","N"],["인호","Y"],["아이스","Y"],["핸드볼","Y"],["파닥","Y"],["승구","N"],["기중","Y"],["형우","N"],["일준","Y"],["파파","Y"],["기라드","N"],["축덕","Y"],["챠챠","N"],["매운맛싸커킥","N"],["양양","N"],["파이리","N"],["아령하세요","Y"],["탄지로","Y"],["그로밋","N"],["버즈","N"],["문댕","Y"],["카스","Y"],["김세종","N"],["야리","N"],["투소(GTS)","Y"],["청용","N"],["그리","N"],["그랩","Y"],["준수","N"],["쬐깐","N"],["모찌","Y"],["아톰","Y"],["라미란","Y"],["슥재","Y"],["요비","Y"],["John","Y"],["전파","N"],["우하하","N"],["진명","Y"],["이로","Y"],["경두","N"],["성이98","N"],["밉준","Y"],["행성이","Y","","정회원 추가되면 여기에 닉넴 정확히 쓰고 옆에 Y"],["ruha_lee","Y"],["천동구","Y"],["공준","Y"],["카푸","Y"]],"Games":[["Game_id","날짜","핑크(A)","블루(B)","승팀"],["718","20260103","4","7","B"],["719","20260110","5","2","A"],["720","20260117","5","3","A"],["721","20260124","4","3","A"],["722","20260131","4","6","B"],["723","20260207","2","1","A"],["724","20260214","2","9","B"],["설날","20260218","5","2","A"],["725","20260221","2","3","B"],["726","20260307","4","8","B"],["727","20260314","2","3","B"],["728","20260321","5","3","A"],["729","20260328","5","5","D"],["730","20260404","1","2","B"],["731","20260411","4","5","B"],["732","20260418","0","0","D"],["733","20260425","7","6","A"],["734","20260509","9","1","A"],["735","20260516","8","1","A"],["736","20260523","3","5","B"],["737","20260530","6","7","B"],["738","20260606","8","10","B"],["739","20260627","5","4","A","","승팀은 자동으로 기록됨"],["740","20260711","4","4","D","","ABCD열만 기록하면 됨."],["741","20260801","2","3","B"],["742","20260822","2","4","B"],["743","20260829","5","4","A"],["744","20260905","5","2","A"],["745","20260912","5","5","D"],["746","20260919","5","4","A"],["747","2026096","3","3","D"],["748"],["749"],["750"]],"Match_Player":[["Game_id","Member_id","팀(핑크A/블루B)","득점","MOM","LATE","결과(W/L)","자책골"],["718","골넣고잠","A","","","","L"],["718","도도리","A","2","","","L"],["718","문댕","A","","","","L"],["718","매쉬","A","1","","","L"],["718","카이","A","","","","L"],["718","카스","A","","","","L"],["718","싸비","A","","","","L"],["718","토토로","A","","","","L"],["718","축덕","A","","","","L"],["718","브페","A","","","","L"],["718","인호","A","1","","","L"],["718","타잔","A","","","","L"],["718","일준","A","","","","L"],["718","샤인","A","","","","L"],["718","구공","A","","","","L"],["718","라미란","B","","","","W"],["718","진이","B","4","","","W"],["718","엠구","B","1","","","W"],["718","잭슨","B","","","","W"],["718","준형","B","","","","W"],["718","도형","B","","","","W"],["718","백호","B","","","","W"],["718","저스틴","B","","","","W"],["718","기돌","B","","","","W"],["718","자나","B","2","MOM","","W"],["718","체리","B","","","","W"],["718","끼끼","B","","","","W"],["718","아라머해","B","","","","W"],["718","코모","B","","","","W"],["719","다니엘","A","","","","W"],["719","도도리","A","1","","","W"],["719","그림자호수","A","","","","W"],["719","끼끼","A","","","","W"],["719","준형","A","","","","W"],["719","요한","A","","","","W"],["719","투소","A","","","","W"],["719","인호","A","","","","W"],["719","매쉬","A","","","","W"],["719","백호","A","","","","W"],["719","폭주기관차","A","","","","W"],["719","카스","A","3","MOM","","W"],["719","축덕","A","","","","W"],["719","샤인","B","","","","L"],["719","진이","B","1","","","L"],["719","브페","B","1","","","L"],["719","기리","B","","","","L"],["719","구공","B","","","","L"],["719","자나","B","","","","L"],["719","문댕","B","","","","L"],["719","이루방","B","","","","L"],["719","필봉","B","","","","L"],["719","타잔","B","","","","L"],["719","토토로","B","","","","L"],["719","아담","B","","","","L"],["719","슥재","B","","","","L"],["719","요비","B","","","","L"],["720","문댕","A","","","","W"],["720","도형","A","","","","W"],["720","도도리","A","2","","","W"],["720","기중","A","2","","1","W"],["720","카스","A","","","","W"],["720","기리","A","","","","W"],["720","라미란","A","","MOM","","W"],["720","아라머해","A","","","","W"],["720","인호","A","","","","W"],["720","필봉","A","","","","W"],["720","진이","A","1","","","W"],["720","골넣고잠","A","","","","W"],["720","아담","A","","","","W"],["720","타잔","A","","","","W"],["720","매쉬","B","1","","","L"],["720","자나","B","","","","L"],["720","백호","B","","","","L"],["720","슥재","B","","","","L"],["720","John","B","","","","L"],["720","엠구","B","1","","","L"],["720","일준","B","","","","L"],["720","정신","B","","","","L"],["720","코모","B","","","","L"],["720","토토로","B","","","","L"],["720","저스틴","B","","","","L"],["720","브페","B","1","","","L"],["720","준형","B","","","","L"],["720","구공","B","","","","L"],["720","이리","B","","","","L"],["721","준형","A","","","","W"],["721","타잔","A","","","","W"],["721","백호","A","","","","W"],["721","축덕","A","","","","W"],["721","John","A","1","MOM","","W"],["721","문댕","A","","","","W"],["721","돌맹","A","1","","","W"],["721","샤인","A","","","","W"],["721","치즈","A","","","","W"],["721","끼끼","B","1","","","L"],["721","아라머해","B","","","","L"],["721","싸비","B","","","","L"],["721","인호","B","","","","L"],["721","카스","B","1","","","L"],["721","라미란","B","","","","L"],["721","슥재","B","","","","L"],["721","도형","B","","","","L"],["721","코모","B","","","","L"],["721","골넣고잠","B","","","","L"],["721","카이","B","1","","","L"],["721","모찌","B","","","","L"],["722","슥재","A","","","","L"],["722","도도리","A","1","","","L"],["722","준형","A","","","","L"],["722","문댕","A","1","","","L"],["722","타잔","A","","","","L"],["722","저스틴","A","","","","L"],["722","백호","A","1","","","L"],["722","라미란","A","","","","L"],["722","다니엘","A","","","","L"],["722","치즈","A","","","","L"],["722","일준","B","","","","W"],["722","끼끼","B","1","","","W"],["722","진이","B","2","","","W"],["722","도형","B","","","","W"],["722","브페","B","","MOM","","W"],["722","카스","B","","","","W"],["722","John","B","1","","","W"],["722","정신","B","","","","W"],["722","기중","B","","","","W"],["722","코모","B","","","","W"],["722","샤인","B","","","","W"],["723","인호","A","","","","W"],["723","정신","A","","","","W"],["723","치즈","A","","","","W"],["723","라미란","A","","","","W"],["723","코모","A","","","","W"],["723","진이","A","","","1","W"],["723","엠구","A","1","MOM","","W"],["723","타잔","A","","","","W"],["723","싸비","A","","","","W"],["723","이루방","A","1","","","W"],["723","도형","A","","","","W"],["723","John","B","","","","L"],["723","준형","B","","","","L"],["723","샤인","B","","","","L"],["723","디노","B","","","","L"],["723","자나","B","","","","L"],["723","전파","B","","","","L"],["723","문댕","B","1","","","L"],["723","축덕","B","","","","L"],["723","일준","B","","","","L"],["723","요비","B","","","","L"],["723","슥재","B","","","","L"],["724","매쉬","A","","","","L"],["724","인호","A","","","","L"],["724","끼끼","A","","","","L"],["724","그림자호수","A","","","","L"],["724","슥재","A","","","","L"],["724","엠구","A","","","","L"],["724","백호","A","","","","L"],["724","John","A","","","","L"],["724","도도리","A","1","","","L"],["724","잭슨","A","","","","L"],["724","기중","A","2","","","L"],["724","진이","B","","","","W"],["724","카스","B","","","","W"],["724","타잔","B","1","","","W"],["724","도형","B","1","MOM","","W"],["724","폭주기관차","B","4","","","W"],["724","자나","B","","","","W"],["724","이루방","B","","","","W"],["724","샤인","B","","","","W"],["724","정신","B","","","","W"],["724","핸드볼","B","","","","W"],["724","일준","B","1","","","W"],["724","기리","B","1","","","W"],["설날","도도리","A","3","","","W"],["설날","진이","A","","","","W"],["설날","카스","A","","","","W"],["설날","인호","A","","","","W"],["설날","타잔","A","2","","","W"],["설날","라미란","A","","","","W"],["설날","기중","A","","","","W"],["설날","정신","A","","","","W"],["설날","도형","A","","","","W"],["설날","치즈","A","","","","W"],["설날","구공","A","","","","W"],["설날","이리","A","","","","W"],["설날","샤인","B","","","","L"],["설날","기리","B","","","","L"],["설날","John","B","","","","L"],["설날","코모","B","","","","L"],["설날","매쉬","B","","","","L"],["설날","준형","B","","","","L"],["설날","토토로","B","","","","L"],["설날","백호","B","1","","","L"],["설날","일준","B","1","","","L"],["설날","슥재","B","","","","L"],["설날","카이","B","","","","L"],["725","구공","A","","","","L"],["725","타잔","A","","","","L"],["725","준형","A","","","","L"],["725","도도리","A","2","","","L"],["725","샤인","A","","","","L"],["725","우하하","A","","","","L"],["725","인호","A","","","","L"],["725","코모","A","","","1","L"],["725","축덕","A","","","","L"],["725","기리","A","","","","L"],["725","John","A","","","","L"],["725","치즈","A","","","","L"],["725","라미란","B","","","","W"],["725","진이","B","","","","W"],["725","이루방","B","","","","W"],["725","다니엘","B","","","1","W"],["725","아라머해","B","","","","W"],["725","엠구","B","1","","","W"],["725","카스","B","","","","W"],["725","싸비","B","","","","W"],["725","자나","B","2","MOM","","W"],["725","정신","B","","","","W"],["726","샤인","A","","","","L"],["726","도도리","A","3","","","L"],["726","인호","A","1","","","L"],["726","타잔","A","","","","L"],["726","싸비","A","","","","L"],["726","저스틴","A","","","","L"],["726","축덕","A","","","","L"],["726","카이","A","","","","L"],["726","백호","A","","","","L"],["726","매쉬","B","3","","","W"],["726","카스","B","1","","","W"],["726","정신","B","1","","","W"],["726","슥재","B","","MOM","","W"],["726","도형","B","","","","W"],["726","라미란","B","","","","W"],["726","코모","B","1","","","W"],["726","진이","B","1","","","W"],["726","요비","B","","","","W"],["726","이리","B","1","","","W"],["726","토토로","B","","","","W"],["727","인호","A","","","","L"],["727","준형","A","","","","L"],["727","진이","A","","","","L"],["727","타잔","A","1","","","L"],["727","끼끼","A","","","","L"],["727","도형","A","","","","L"],["727","John","A","","","","L"],["727","싸비","A","","","","L"],["727","이로","A","","","","L"],["727","진명","A","1","","","L"],["727","샤인","A","","","","L"],["727","백호","A","","","","L"],["727","축덕","A","","","","L"],["727","카스","B","","MOM","","W"],["727","라미란","B","","","","W"],["727","도도리","B","2","","","W"],["727","자나","B","","","","W"],["727","기중","B","","","","W"],["727","아라머해","B","","","","W"],["727","저스틴","B","","","","W"],["727","일준","B","","","","W"],["727","핸드볼","B","","","","W"],["727","코모","B","1","","","W"],["727","잭슨","B","","","","W"],["727","투소","B","","","","W"],["727","치즈","B","","","","W"],["728","이루방","A","","","","W"],["728","도도리","A","3","","","W"],["728","끼끼","A","1","","","W"],["728","일준","A","","","","W"],["728","엠구","A","","","","W"],["728","문댕","A","","","","W"],["728","타잔","A","1","","","W"],["728","브페","A","","","","W"],["728","정신","A","","","","W"],["728","라미란","A","","","","W"],["728","축덕","A","","MOM","","W"],["728","코모","A","","","","W"],["728","백호","B","","","","L"],["728","진이","B","","","","L"],["728","기리","B","1","","","L"],["728","매쉬","B","","","","L"],["728","도형","B","","","","L"],["728","카스","B","","","","L"],["728","우영","B","","","","L"],["728","준형","B","","","","L"],["728","싸비","B","","","","L"],["728","카이","B","","","","L"],["728","샤인","B","","","","L"],["728","진명","B","","","","L"],["728","요비","B","","","","L"],["728","폭주기관차","B","2","","","L"],["728","이수댁","B","","","","L"],["729","기중","A","","","","D"],["729","백호","A","1","","","D"],["729","매쉬","A","","","","D"],["729","도도리","A","1","MOM","","D"],["729","정신","A","","","","D"],["729","아라머해","A","","","","D"],["729","자나","A","2","","","D"],["729","타잔","A","","","","D"],["729","핸드볼","A","","","","D"],["729","진짜사나이","A","","","","D"],["729","샤인","A","","","","D"],["729","그림자호수","A","","","","D"],["729","치즈","B","","","","D"],["729","진이","B","","","","D"],["729","끼끼","B","2","","","D"],["729","저스틴","B","2","","","D"],["729","라미란","B","1","","","D"],["729","준형","B","","","","D","1"],["729","일준","B","","MOM","","D"],["729","축덕","B","","","","D"],["729","진명","B","","","","D"],["729","이로","B","","","","D"],["729","sean","B","","","","D"],["729","잭슨","B","","","","D"],["730","진이","A","1","","","L"],["730","샤인","A","","","","L"],["730","코모","A","","","","L"],["730","도형","A","","","","L"],["730","도도리","A","","","","L"],["730","진명","A","","","","L"],["730","정신","A","","","","L"],["730","카스","A","","","","L"],["730","파파","A","","","","L"],["730","우영","A","","","","L"],["730","타로","A","","","","L"],["730","축덕","A","","","","L"],["730","성이98","A","","","","L"],["730","이루방","A","","","","L"],["730","타잔","A","","","","L"],["730","백호","B","","","","W"],["730","매쉬","B","","","","W"],["730","일준","B","","","","W"],["730","카이","B","","","","W"],["730","라미란","B","","","","W"],["730","슥재","B","","","","W"],["730","준형","B","","","","W"],["730","싸비","B","","","","W"],["730","엠구","B","","","","W"],["730","인호","B","","","","W"],["730","기리","B","1","","","W"],["730","저스틴","B","1","MOM","","W"],["730","이리","B","","","","W"],["730","치즈","B","","","","W"],["731","샤인","A","","","","L"],["731","도도리","A","1","","","L"],["731","카스","A","","","","L"],["731","정신","A","","","","L"],["731","진명","A","","","","L"],["731","자나","A","1","","","L"],["731","기중","A","","","","L"],["731","끼끼","A","1","","","L"],["731","진이","A","","","","L"],["731","축덕","A","","","","L"],["731","코모","A","","","","L"],["731","파파","A","1","","","L"],["731","요비","A","","","","L"],["731","도형","A","","","","L"],["731","타잔","A","","","","L"],["731","브페","B","1","MOM","","W"],["731","인호","B","","","","W"],["731","매쉬","B","","","","W"],["731","라미란","B","1","","","W"],["731","준형","B","","","","W"],["731","폭주기관차","B","","","","W"],["731","모찌","B","","","","W"],["731","핸드볼","B","","","","W"],["731","경두","B","","","","W"],["731","백호","B","","","","W"],["731","이리","B","2","","","W"],["731","치즈","B","","","","W"],["731","일준","B","","","","W"],["731","카이","B","1","","","W"],["731","저스틴","B","","","","W"],["732","진이","A","","","","D"],["732","샤인","A","","","","D"],["732","타잔","A","","","","D"],["732","도도리","A","","","","D"],["732","우영","A","","","","D"],["732","축덕","A","","","","D"],["732","진명","A","","","","D"],["732","성이98","A","","","","D"],["732","정신","A","","","","D"],["732","카스","A","","","","D"],["732","끼끼","A","","","","D"],["732","타로","A","","","","D"],["732","다니엘","A","","","","D"],["732","코모","A","","MOM","","D"],["732","파파","A","","","","D"],["732","자나","A","","","","D"],["732","준형","B","","","","D"],["732","기리","B","","","","D"],["732","백호","B","","","","D"],["732","문댕","B","","","","D"],["732","이로","B","","","","D"],["732","라미란","B","","","","D"],["732","카이","B","","","","D"],["732","싸비","B","","","","D"],["732","인호","B","","","","D"],["732","치즈","B","","MOM","","D"],["732","이리","B","","","","D"],["732","이수댁","B","","","","D"],["733","도도리","A","","","","W"],["733","축덕","A","","","","W"],["733","엠구","A","","","","W"],["733","진싸","A","","","","W"],["733","치즈","A","","","","W"],["733","미란","A","","","","W"],["733","코모","A","1","","","W"],["733","파파","A","","","","W"],["733","잭슨","A","","","","W"],["733","끼끼","A","2","MOM","","W"],["733","이루방","A","1","","","W"],["733","아라머해","A","1","","","W"],["733","폭주기관차","A","2","","","W"],["733","토토로","A","","","","W"],["733","기중","A","","","","W"],["733","샤인","A","","","","W"],["733","준형","B","","","1","L"],["733","인호","B","","","","L"],["733","정신","B","2","","","L"],["733","브페","B","1","","","L"],["733","매쉬","B","1","","","L"],["733","저스틴","B","","","","L"],["733","백호","B","","","","L"],["733","슥재","B","","","","L"],["733","그림자호수","B","","","","L"],["733","진이","B","1","","","L"],["733","밉준","B","","","","L"],["733","진명","B","1","","","L"],["733","이리","B","","","","L"],["733","타잔","B","","","","L"],["733","이로","B","","","","L"],["734","이로","A","","","","W"],["734","아라머해","A","","","","W"],["734","폭주기관차","A","1","","","W"],["734","브페","A","1","","","W"],["734","준형","A","","","","W"],["734","아톰","A","","","","W"],["734","일준","A","","","","W"],["734","코모","A","1","","","W"],["734","진명","A","","","","W"],["734","음주가무","A","","","","W"],["734","토토로","A","1","MOM","","W"],["734","타로","B","","","","L"],["734","파파","B","","","","L"],["734","치즈","B","","","","L"],["734","끼끼","B","","","","L"],["734","이리","B","","","","L"],["734","기리","B","1","","","L"],["734","매쉬","B","","","","L"],["734","도형","B","","","","L"],["734","축덕","B","","","","L"],["734","샤인","B","","","","L"],["734","백호","B","","","","L"],["734","타잔","B","","","","L"],["734","카이","B","","","","L"],["735","정신","A","","","","W"],["735","쭌킴","A","3","","","W"],["735","싸비","A","","","","W"],["735","저스틴","A","1","","","W"],["735","카스","A","","","","W"],["735","진이","A","1","","","W"],["735","파파","A","","","","W"],["735","진명","A","1","MOM","","W"],["735","매쉬","B","","","","L"],["735","이로","B","","","","L"],["735","샤인","B","","","","L"],["735","축덕","B","","","","L"],["735","코모","B","","","","L"],["735","토토로","B","","","","L"],["735","도형","B","","","","L"],["735","제라드","B","","","","L"],["735","준형","B","","","","L"],["735","기중","B","","","","L"],["735","다니엘","B","","","","L"],["735","치즈","B","","","","L"],["735","일준","B","","","","L"],["736","정신","A","1","","","L"],["736","타잔","A","","","","L"],["736","치즈","A","","","","L"],["736","축덕","A","","","","L"],["736","아라머해","A","","","","L"],["736","매쉬","A","1","","","L"],["736","카스","A","","","","L"],["736","밉준","A","","","","L"],["736","요비","A","","","","L"],["736","카이","A","","","","L"],["736","이리","A","1","","","L"],["736","쭌킴","B","","","","W"],["736","준형","B","","MOM","","W"],["736","아톰","B","","","","W"],["736","엠구","B","3","","","W"],["736","자나","B","","","","W"],["736","진명","B","2","","","W"],["736","파파","B","","","","W"],["736","인호","B","","","","W"],["736","코모","B","","","","W"],["737","이로","A","","","","L"],["737","제라드","A","","","","L"],["737","저스틴","A","","","","L"],["737","정신","A","4","","","L"],["737","카스","A","","","","L"],["737","폭주기관차","A","1","","","L"],["737","싸비","A","","","","L"],["737","치즈","A","","","","L"],["737","양필봉","A","1","","","L"],["737","타잔","B","","","","W"],["737","요비","B","","","","W"],["737","모찌","B","","","","W"],["737","쭌킴","B","1","","","W"],["737","매쉬","B","","","","W"],["737","행성이","B","","","","W"],["737","음주가무","B","","","","W"],["737","이루방","B","","MOM","","W"],["737","진명","B","1","","","W"],["737","파파","B","","","","W"],["737","코모","B","","","","W"],["738","타잔","B","1","","","W"],["738","양필봉","B","1","","","W"],["738","우영","B","","","","W"],["738","일준","B","","","","W"],["738","이로","B","","","","W"],["738","명진","B","","","","W"],["738","아톰","B","3","","","W"],["738","기리","B","3","","","W"],["738","진이","B","2","MOM","","W"],["738","정신","B","","","","W"],["738","매쉬","A","","","","L"],["738","브페","A","5","","","L"],["738","끼끼","A","1","","","L"],["738","도형","A","","","","L"],["738","카스","A","","","","L"],["738","모찌","A","2","","","L"],["738","sean","A","","","","L"],["738","행성","A","","","","L"],["738","축덕","A","","","","L"],["738","이리","A","","","","L"],["739","슥재","A","","","","W"],["739","싸비","A","","","","W"],["739","쭌킴","A","","","","W"],["739","샤인","A","","","","W"],["739","백호","A","1","","","W"],["739","이루방","A","","","","W"],["739","탄지로","A","","","","W"],["739","진이","A","1","","","W"],["739","폭기","A","2","","","W"],["739","자나","A","","","","W"],["739","축덕","A","","MOM","","W"],["739","매쉬","B","","","","L"],["739","모찌","B","","","","L"],["739","진명","B","2","","","L"],["739","타잔","B","","","","L"],["739","행성이","B","","","","L"],["739","코모","B","","","","L"],["739","정신","B","","","","L"],["739","카스","B","","","","L"],["739","저스틴","B","","","","L"],["739","도도리","B","2","","","L"],["739","요비","B","","","","L"],["740","잭슨","A","","","","D"],["740","진이","A","3","","","D","","","매쉬가 올려주는 경기기록보고"],["740","타잔","A","","","","D","","","핑크 > 블루 순서로 팀원이름 적기"],["740","진명","A","1","MOM","","D","","","무조건 [카페 닉네임] 기준으로 적어야 함"],["740","인호","A","","","","D","","","ex 폭주기관차","폭기x > 인식안됨"],["740","샤인","A","","","","D","","","ex 싸비","사비x > 인식안됨"],["740","파닥","A","","","","D","","","C열에 A(핑크)인지 B(블루)인지 적기"],["740","아라머해","A","","","","D","","","D열에 골넣은 사람 체크하기"],["740","싸비","A","","","","D","","","E열에 MOM이라고 기록하기"],["740","치즈","A","","","","D","","","F는 지각자. 지각 시 1이라고 체크"],["740","또리","A","","","","D","","","G열은 자동 기록 됨"],["740","이로","A","","","","D"],["740","정신","B","2","MOM","","D"],["740","브페","B","1","","","D"],["740","sean","B","","","","D"],["740","파파","B","","","","D"],["740","핸드볼","B","1","","","D"],["740","일준","B","","","","D"],["740","축덕","B","","","","D"],["740","그림자호수","B","","","","D"],["740","도형","B","","","","D"],["740","코모","B","","","","D"],["741","행성이","A","","","","L"],["741","치즈","A","","","","L"],["741","진이","A","","","","L"],["741","또리","A","","","","L"],["741","잭슨","A","","","","L"],["741","아라머해","A","","","","L"],["741","정신","A","","","","L"],["741","카이","A","","","","L"],["741","밉준","A","","","","L"],["741","도형","A","","","","L"],["741","라미란","A","","","","L"],["741","싸비","A","","","","L"],["741","백호","A","2","","","L"],["741","타잔","B","","","","W"],["741","진명","B","","","","W"],["741","저스틴","B","","MOM","","W"],["741","쭌킴","B","","","","W"],["741","파파","B","2","","","W"],["741","샤인","B","","","","W"],["741","축덕","B","","","","W"],["741","일준","B","","","","W"],["741","이루방","B","","","","W"],["741","카스","B","1","","","W"],["741","아이스","B","","","","W"],["742","카이","A","","","","L"],["742","타잔","A","","","","L"],["742","매쉬","A","","","","L"],["742","자나","A","","","","L"],["742","정신","A","","","","L"],["742","라미란","A","","","","L"],["742","진명","A","","","","L"],["742","이로","A","","","","L"],["742","데이","A","","","","L"],["742","도도리","A","2","","","L"],["742","샤인","B","","","","W"],["742","축덕","B","","","","W"],["742","엠구","B","3","MOM","","W"],["742","진이","B","","","","W"],["742","파파","B","","","","W"],["742","일준","B","","","","W"],["742","타로","B","1","","","W"],["742","카스","B","","","","W"],["742","도형","B","","","","W"],["742","John","B","","","","W"],["742","우영","B","","","","W"],["742","요비","B","","","","W"],["743","우영","A","1","MOM","","W"],["743","백호","A","1","","","W"],["743","John","A","","","","W"],["743","이로","A","","","","W"],["743","탄지로","A","","","","W"],["743","저스틴","A","","","","W"],["743","진이","A","2","","","W"],["743","파파","A","","","","W"],["743","이루방","A","","","","W"],["743","코모","A","","","","W"],["743","이리","A","1","","","W"],["743","핸드볼","A","","","","W"],["743","밉준","A","","","","W"],["743","타잔","A","","","","W"],["743","엠구","B","","","","L"],["743","축덕","B","","","","L"],["743","진명","B","3","","","L"],["743","치즈","B","","","","L"],["743","카스","B","1","","","L"],["743","기중","B","","","","L"],["743","자나","B","","","","L"],["743","일준","B","","","","L"],["743","골넣고잠","B","","","","L"],["743","샤인","B","","","","L"],["743","또리","B","","","","L"],["743","도형","B","","","","L"],["743","정신","B","","","","L"],["744","매쉬","A","","","","W"],["744","백호","A","","MOM","","W"],["744","정신","A","","","","W"],["744","브페","A","2","","","W"],["744","끼끼","A","1","","","W"],["744","축덕","A","","","","W"],["744","John","A","","","","W"],["744","자나","A","","","","W"],["744","행성이","A","","","","W"],["744","골넣고잠","A","","","","W"],["744","저스틴","A","","","","W"],["744","샤인","A","","","","W"],["744","타잔","B","","","","L"],["744","인호","B","","","","L"],["744","카스","B","","","","L"],["744","기리","B","","","","L"],["744","쭌킴","B","","","","L"],["744","파파","B","","","","L"],["744","아이스","B","","","","L"],["744","이루방","B","","","","L"],["744","그림자호수","B","","","","L"],["744","진이","B","2","","","L"],["744","요비","B","","","1","L"],["744","밉준","B","","","","L"],["744","다니엘","B","","","","L"],["745","인호","A","","","","D"],["745","브페","A","1","","","D"],["745","잭슨","A","","","","D"],["745","아라머해","A","","","","D"],["745","엠구","A","1","","","D"],["745","우영","A","1","","","D"],["745","일준","A","","","","D"],["745","탄지로","A","","","","D"],["745","진명","A","2","MOM","","D"],["745","파닥","A","","","","D"],["745","도형","A","","","","D"],["745","타잔","A","","","","D"],["745","샤인","B","","","","D"],["745","매쉬","B","1","","","D"],["745","John","B","","","","D"],["745","슥재","B","1","","","D"],["745","폭주기관차","B","3","MOM","","D"],["745","치즈","B","","","","D"],["745","이로","B","","","","D"],["745","음주가무","B","","","","D"],["745","공준","B","","","","D"],["745","골넣고잠","B","","","","D"],["745","카스","B","","","","D"],["745","축덕","B","","","","D"],["745","행성이","B","","","","D"],["746","축덕","A"],["746","양필봉","A","1","","","W"],["746","이루방","A","1","","","W"],["746","요비","A","","","","W"],["746","치즈","A","","MOM","","W"],["746","코모","A","","","","W"],["746","명준","A","1","","","W"],["746","싸비","A","","","","W"],["746","라미란","A","","","","W"],["746","딘킴","A","","","","W"],["746","정신","A","","","","W"],["746","슥재","A","","","","W"],["746","준희","A","","","","W"],["746","이로","B","","","","L","1"],["746","공준","B","","","","L"],["746","잭슨","B","","","","L"],["746","일준","B","","","","L"],["746","파파","B","1","","","L"],["746","카스","B","","","","L"],["746","아이스","B","","","","L"],["746","챠챠","B","","","","L"],["746","타잔","B","1","","","L"],["746","도형","B","","","","L"],["746","진명","B","1","","","L"],["746","샤인","B","","","","L"],["746","바우","B","1","","","L"],["747","정신","A","","MOM","","D"],["747","우영우","A","","","","D"],["747","John","A","1","","","D"],["747","폭주기관차","A","","","","D"],["747","도형","A","","","","D"],["747","카이","A","","","","D"],["747","끼끼","A","1","","","D"],["747","데이","A","1","","","D"],["747","아이스","A","","","","D"],["747","저스틴","A","","","","D"],["747","축덕","A","","","","D"],["747","브페","A","","","","D"],["747","밉준","A","","","","D"],["747","샤인","A","","","","D"],["747","공준","A","","","","D"],["747","라미란","B","","","","D"],["747","인호","B","","","","D"],["747","진이","B","2","","","D"],["747","백호","B","","","","D"],["747","일준","B","","","","D"],["747","매쉬","B","","","","D"],["747","타잔","B","","","","D"],["747","탄지로","B","","","","D"],["747","도도리","B","","","","D"],["747","기중","B","","","","D"],["747","치즈","B","","","","D"],["747","코모","B","","","","D"],["747","이루방","B","","","","D"],["747","파파","B","","MOM","","D"],["747","진명","B","1","","","D"],["747","천동구","B","","","","D"],["747","타로","B","","","","D"]],"Stats":[["Member_id","경기수","득점","자책골","MOM","지각","승","무","패","승률","승점"],["자나","15","7","0","2","0","7","2","6","53.85%","23"],["찬스","0","0","0","0","0","0","0","0","0.00%","0"],["타로","5","1","0","0","0","1","2","2","33.33%","5"],["음주가무","3","0","0","0","0","2","1","0","100.00%","7"],["제라드","2","0","0","0","0","0","0","2","0.00%","0"],["스테이(stay)","0","0","0","0","0","0","0","0","0.00%","0"],["쵸비","0","0","0","0","0","0","0","0","0.00%","0"],["다니엘","6","0","0","0","1","2","1","3","40.00%","7"],["꾸룩이","0","0","0","0","0","0","0","0","0.00%","0"],["내사랑필이","0","0","0","0","0","0","0","0","0.00%","0","","","stat 시트는 자동으로 생성되므로 건드릴 필요 X"],["카이","13","2","0","0","0","2","2","9","18.18%","8"],["기리","11","7","0","0","0","4","1","6","40.00%","13"],["몽키매직","0","0","0","0","0","0","0","0","0.00%","0"],["리오타","0","0","0","0","0","0","0","0","0.00%","0"],["3232","0","0","0","0","0","0","0","0","0.00%","0"],["우영","7","2","0","1","0","3","2","2","60.00%","11"],["그림자호수","6","0","0","0","0","1","2","3","25.00%","5"],["도형","22","1","0","1","0","8","3","11","42.11%","27"],["재민","0","0","0","0","0","0","0","0","0.00%","0"],["샤인","27","0","0","0","0","8","5","14","36.36%","29"],["토토로","8","1","0","1","0","3","0","5","37.50%","9","","","","오 자동적용이네"],["체리(chary)","0","0","0","0","0","0","0","0","0.00%","0"],["기돌","1","0","0","0","0","1","0","0","100.00%","3"],["이수댁","2","0","0","0","0","0","1","1","0.00%","1"],["짱짱","0","0","0","0","0","0","0","0","0.00%","0"],["브페","13","14","0","2","0","5","3","5","50.00%","18"],["라파","0","0","0","0","0","0","0","0","0.00%","0"],["엠구","12","11","0","2","0","8","1","3","72.73%","25"],["끼끼","15","11","0","1","0","6","3","6","50.00%","21"],["도또","0","0","0","0","0","0","0","0","0.00%","0"],["이루방","14","3","0","1","0","10","1","3","76.92%","31"],["도도리","18","26","0","1","0","6","3","9","40.00%","21"],["백호","21","7","0","1","0","8","3","10","44.44%","27"],["sean","3","0","0","0","0","0","2","1","0.00%","2"],["쭌킴","6","4","0","0","0","5","0","1","83.33%","15"],["코모","23","4","0","1","1","12","3","8","60.00%","39"],["폭주기관차","9","13","0","1","0","5","2","2","71.43%","17"],["양필봉","3","3","0","0","0","2","0","1","66.67%","6"],["치즈","21","0","0","2","0","8","5","8","50.00%","29"],["산이","0","0","0","0","0","0","0","0","0.00%","0"],["정신","25","10","0","2","0","11","4","10","52.38%","37"],["타잔","30","7","0","0","0","10","5","15","40.00%","35"],["매쉬","21","8","0","0","0","6","3","12","33.33%","21"],["진이","25","24","0","1","1","13","4","8","61.90%","43"],["준형","18","0","1","1","1","7","2","9","43.75%","23"],["아라머해","12","1","0","0","0","6","3","3","66.67%","21"],["Din_K","0","0","0","0","0","0","0","0","0.00%","0"],["하루","0","0","0","0","0","0","0","0","0.00%","0"],["싸비","15","0","0","0","0","6","2","7","46.15%","20"],["진짜사나이","1","0","0","0","0","0","1","0","0.00%","1"],["아이완","0","0","0","0","0","0","0","0","0.00%","0"],["잭슨","9","0","0","0","0","3","3","3","50.00%","12"],["저스틴","16","4","0","2","0","8","2","6","57.14%","26"],["골넣고잠","6","0","0","0","0","2","1","3","40.00%","7"],["구공","5","0","0","0","0","1","0","4","20.00%","3"],["이리","11","5","0","0","0","5","1","5","50.00%","16"],["길미","0","0","0","0","0","0","0","0","0.00%","0"],["인호","19","2","0","0","0","7","4","8","46.67%","25"],["아이스","4","0","0","0","0","1","1","2","33.33%","4"],["핸드볼","6","1","0","0","0","4","2","0","100.00%","14"],["파닥","2","0","0","0","0","0","2","0","0.00%","2"],["승구","0","0","0","0","0","0","0","0","0.00%","0"],["기중","11","4","0","0","1","5","2","4","55.56%","17"],["형우","0","0","0","0","0","0","0","0","0.00%","0"],["일준","21","2","0","1","0","10","4","7","58.82%","34"],["파파","15","4","0","1","0","7","3","5","58.33%","24"],["기라드","0","0","0","0","0","0","0","0","0.00%","0"],["축덕","26","0","0","2","0","8","5","12","40.00%","29"],["챠챠","1","0","0","0","0","0","0","1","0.00%","0"],["매운맛싸커킥","0","0","0","0","0","0","0","0","0.00%","0"],["양양","0","0","0","0","0","0","0","0","0.00%","0"],["파이리","0","0","0","0","0","0","0","0","0.00%","0"],["아령하세요","0","0","0","0","0","0","0","0","0.00%","0"],["탄지로","4","0","0","0","0","2","2","0","100.00%","8"],["그로밋","0","0","0","0","0","0","0","0","0.00%","0"],["버즈","0","0","0","0","0","0","0","0","0.00%","0"],["문댕","8","2","0","0","0","3","1","4","42.86%","10"],["카스","25","7","0","2","0","11","2","12","47.83%","35"],["김세종","0","0","0","0","0","0","0","0","0.00%","0"],["야리","0","0","0","0","0","0","0","0","0.00%","0"],["투소(GTS)","0","0","0","0","0","0","0","0","0.00%","0"],["청용","0","0","0","0","0","0","0","0","0.00%","0"],["그리","0","0","0","0","0","0","0","0","0.00%","0"],["그랩","0","0","0","0","0","0","0","0","0.00%","0"],["준수","0","0","0","0","0","0","0","0","0.00%","0"],["쬐깐","0","0","0","0","0","0","0","0","0.00%","0"],["모찌","5","2","0","0","0","2","0","3","40.00%","6"],["아톰","3","3","0","0","0","3","0","0","100.00%","9"],["라미란","18","2","0","1","0","11","3","4","73.33%","36"],["슥재","13","1","0","1","0","4","1","8","33.33%","13"],["요비","11","0","0","0","1","4","0","7","36.36%","12"],["John","13","3","0","1","0","5","2","6","45.45%","17"],["전파","1","0","0","0","0","0","0","1","0.00%","0"],["우하하","1","0","0","0","0","0","0","1","0.00%","0"],["진명","19","16","0","3","0","5","5","9","35.71%","20"],["이로","13","0","1","0","0","3","4","6","33.33%","13"],["경두","1","0","0","0","0","1","0","0","100.00%","3"],["성이98","2","0","0","0","0","0","1","1","0.00%","1"],["밉준","6","0","0","0","0","1","1","4","20.00%","4"],["행성이","5","0","0","0","0","2","1","2","50.00%","7"],["ruha_lee","0","0","0","0","0","0","0","0","0.00%","0"],["천동구","1","0","0","0","0","0","1","0","0.00%","1"],["공준","3","0","0","0","0","0","2","1","0.00%","2"],["카푸","0","0","0","0","0","0","0","0","0.00%","0"]],"updatedAt":"2026-10-15T11:00:00+09:00"}</script>
+<script>
+/* ===== 설정 ===== */
+const CONFIG = {
+  SHEET_ID: '1A6L2YeHQslEo9s5Pxg13xTupShrQodrysk8IZ1hckbQ',   // 승률계산기 시트 (링크 공개 · 보기 전용으로 읽기만 함)
+  SHEETS: ['Members', 'Games', 'Match_Player', 'Stats'],
+  SNAPSHOT_LABEL: '10월 15일',                                // 연결이 안 될 때 보여 줄 저장본 날짜
+};
+
+/* 시트 한 장을 CSV로 읽는다 (구글 시트 공개 조회 주소) */
+async function fetchSheet(name){
+  const url = `https://docs.google.com/spreadsheets/d/${CONFIG.SHEET_ID}/gviz/tq?tqx=out:csv&headers=1&sheet=${encodeURIComponent(name)}&_=${Date.now()}`;
+  const res = await fetch(url, { cache: 'no-store' });
+  if (!res.ok) throw new Error(name + ' ' + res.status);
+  const text = await res.text();
+  if (/^\s*<!doctype|<html/i.test(text)) throw new Error(name + ' 공개 설정 확인 필요');
+  return parseCSV(text);
+}
+function parseCSV(text){
+  const out = []; let row = [], cell = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) {
+      if (c === '"') { if (text[i+1] === '"') { cell += '"'; i++; } else q = false; }
+      else cell += c;
+    } else if (c === '"') q = true;
+    else if (c === ',') { row.push(cell); cell = ''; }
+    else if (c === '\n') { row.push(cell); out.push(row); row = []; cell = ''; }
+    else if (c !== '\r') cell += c;
+  }
+  if (cell !== '' || row.length) { row.push(cell); out.push(row); }
+  return out;
+}
+
+/* ===== 유틸 ===== */
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const clean = v => (v == null ? '' : String(v)).trim();
+const int = v => { const n = parseInt(clean(v).replace(/[^\d-]/g, ''), 10); return isNaN(n) ? 0 : n; };
+const ko = (a, b) => a.localeCompare(b, 'ko');
+const store = {
+  get(k){ try { return localStorage.getItem(k); } catch(e){ return null; } },
+  set(k,v){ try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch(e){} }
+};
+const WD = ['일','월','화','수','목','금','토'];
+function fmtDate(s, withYear){
+  s = clean(s);
+  if (!/^\d{8}$/.test(s)) return { short: s || '날짜 없음', long: s || '날짜 없음', ok:false };
+  const y = +s.slice(0,4), m = +s.slice(4,6), d = +s.slice(6,8);
+  const wd = WD[new Date(y, m-1, d).getDay()];
+  return { short: `${m}.${d}`, long: `${withYear ? y + '. ' : ''}${m}. ${d}. (${wd})`, wd, y, ok:true };
+}
+const TEAM = { A:'핑크', B:'블루' };
+const RES = { W:'승', D:'무', L:'패' };
+const gLabel = id => /^\d+$/.test(id) ? '#' + id : id;
+const pct = (w, l) => (w + l) ? w / (w + l) : 0;
+const pctTxt = v => (v * 100).toFixed(1).replace(/\.0$/, '') + '%';
+
+/* ===== 데이터 가공 ===== */
+function build(raw){
+  const rows = n => (raw[n] || []).slice(1).map(r => r.map(clean));
+  const members = new Set(rows('Members').filter(r => r[0]).map(r => r[0]));
+
+  // 구글 공개 조회는 숫자 열에 섞인 글자(예: Game_id "설날")를 빈칸으로 돌려준다.
+  // 점수가 있는데 Game_id만 빈 경기는 "번외"로 이름 붙이고, Match_Player의 빈 Game_id 묶음을 순서대로 짝지어 복구한다.
+  const blankIds = [];
+  const games = rows('Games')
+    .filter(r => (r[0] || r[1]) && r[2] !== '' && r[3] !== '' && r[2] != null && r[3] != null)
+    .map((r, i) => {
+      const a = int(r[2]), b = int(r[3]);
+      const win = (r[4] || (a > b ? 'A' : a < b ? 'B' : 'D')).toUpperCase();
+      let id = r[0];
+      if (!id) { id = '번외' + (blankIds.length ? ' ' + (blankIds.length + 1) : ''); blankIds.push(id); }
+      return { id, date: r[1], a, b, win, idx: i };
+    });
+  const gById = new Map(games.map(g => [g.id, g]));
+
+  let grp = 0, prevBlank = false;
+  const mpRows = rows('Match_Player').map(r => {
+    if (!r[0] && r[1]) { if (!prevBlank) grp++; prevBlank = true; r = [blankIds[grp - 1] || '', ...r.slice(1)]; }
+    else prevBlank = false;
+    return r;
+  });
+  const mp = mpRows.filter(r => r[0] && r[1] && gById.has(r[0])).map(r => {
+    const g = gById.get(r[0]); const team = (r[2] || '').toUpperCase();
+    const res = g.win === 'D' ? 'D' : (team && g.win === team ? 'W' : team ? 'L' : (r[6] || '').toUpperCase());
+    return { gid: r[0], name: r[1], team, goals: int(r[3]), mom: /mom/i.test(r[4] || ''), late: int(r[5]), og: int(r[7]), res, g };
+  });
+
+  let stats = rows('Stats').filter(r => r[0]).map(r => {
+    const s = { name: r[0], gp: int(r[1]), g: int(r[2]), og: int(r[3]), mom: int(r[4]), late: int(r[5]), w: int(r[6]), d: int(r[7]), l: int(r[8]), pts: int(r[10]) };
+    s.wr = pct(s.w, s.l);
+    return s;
+  });
+  if (!stats.length) { // Stats 시트가 비었을 때: 경기 기록으로 직접 계산
+    const m = new Map();
+    mp.forEach(p => {
+      const s = m.get(p.name) || { name:p.name, gp:0,g:0,og:0,mom:0,late:0,w:0,d:0,l:0 };
+      s.gp++; s.g += p.goals; s.og += p.og; s.mom += p.mom ? 1 : 0; s.late += p.late;
+      if (p.res === 'W') s.w++; else if (p.res === 'D') s.d++; else if (p.res === 'L') s.l++;
+      m.set(p.name, s);
+    });
+    stats = [...m.values()].map(s => (s.pts = s.w*3 + s.d, s.wr = pct(s.w, s.l), s));
+  }
+  const players = stats.filter(s => s.gp > 0);
+  const byName = new Map(stats.map(s => [s.name, s]));
+
+  // 승점 순위(동점 공동 순위)
+  const rankOf = key => {
+    const sorted = [...players].sort((x, y) => y[key] - x[key]);
+    const r = new Map(); let prev = null, rank = 0;
+    sorted.forEach((p, i) => { if (p[key] !== prev) { rank = i + 1; prev = p[key]; } r.set(p.name, rank); });
+    return r;
+  };
+  const season = (games.find(g => /^\d{8}$/.test(g.date)) || {}).date;
+  return { members, games, gById, mp, stats, players, byName, ptsRank: rankOf('pts'), goalRank: rankOf('g'), season: season ? season.slice(0,4) : '' };
+}
+
+/* ===== 상태 ===== */
+const state = { tab: 'rank', who: null, sort: 'pts', q: '', minGp: 1, src: '', loadedAt: null };
+let DB = null;
+const SNAPSHOT = JSON.parse(document.getElementById('snapshot').textContent);
+
+async function load(fresh){
+  $('#refresh').classList.add('spin');
+  let data = null;
+  try {
+    const tables = await Promise.all(CONFIG.SHEETS.map(fetchSheet));
+    data = {}; CONFIG.SHEETS.forEach((n, i) => data[n] = tables[i]);
+    if (!data.Stats.length || !data.Games.length) throw new Error('empty');
+    state.src = 'live';
+  } catch (e) { data = SNAPSHOT; state.src = 'fail'; console.warn('시트 읽기 실패:', e); }
+  DB = build(data);
+  state.loadedAt = new Date();
+  $('#refresh').classList.remove('spin');
+  renderStatus(); renderAll();
+}
+
+function renderStatus(){
+  const pill = $('#pill'), t = $('#pillText');
+  pill.className = 'pill' + (state.src === 'live' ? ' live' : state.src === 'fail' ? ' warn' : '');
+  if (state.src === 'live') {
+    const d = state.loadedAt; t.textContent = `시트 연결 · ${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
+  } else t.textContent = `${CONFIG.SNAPSHOT_LABEL} 저장본`;
+  $('#season').textContent = `${DB.season ? DB.season + ' 시즌 · ' : ''}${DB.games.length}경기`;
+  $('#foot').textContent = state.src === 'live'
+    ? '기록 시트를 그대로 읽어 와 보여 줍니다. 오른쪽 위 새로고침을 누르면 최신 기록을 다시 불러옵니다.'
+    : `시트를 읽지 못해 ${CONFIG.SNAPSHOT_LABEL} 저장본을 보여 주고 있습니다. 잠시 뒤 새로고침을 눌러 주세요.`;
+}
+
+/* ===== 탭 ===== */
+function setTab(t, push){
+  state.tab = t;
+  document.querySelectorAll('.tab').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === t));
+  ['me','rank','games'].forEach(k => $('#view-' + k).hidden = k !== t);
+  if (push !== false) { try { history.replaceState(null, '', '#' + t); } catch(e){} }
+  window.scrollTo({ top: 0 });
+}
+function openPlayer(name){
+  state.who = name; $('#who').value = name; renderMe(); setTab('me');
+}
+
+function renderAll(){ renderNames(); renderMe(); renderRank(); renderGames(); }
+
+function renderNames(){
+  const names = DB.players.map(p => p.name).sort(ko);
+  $('#names').innerHTML = names.map(n => `<option value="${esc(n)}"></option>`).join('');
+}
+
+/* ===== 개인 기록 ===== */
+function renderMe(){
+  const box = $('#meBody'); const mine = store.get('wf_me');
+  const pin = $('#pin');
+  const p = state.who && DB.byName.get(state.who);
+  pin.classList.toggle('on', !!(state.who && mine === state.who));
+  pin.textContent = state.who && mine === state.who ? '★ 내 이름' : '내 이름으로 저장';
+  pin.disabled = !p;
+
+  if (!p) {
+    const names = DB.players.map(x => x.name).sort(ko);
+    box.innerHTML = `
+      ${state.who ? `<div class="card"><b>"${esc(state.who)}"</b> 기록을 찾지 못했어요. 카페 닉네임과 똑같이 입력했는지 확인해 주세요.</div>` : ''}
+      <div class="card"><h3>이름을 눌러 기록 보기</h3><p class="note" style="margin-top:4px">출전 기록이 있는 ${names.length}명 · 가나다순</p>
+      <div class="chips" style="margin-top:12px">${names.map(n => `<button class="chip" type="button" data-p="${esc(n)}">${esc(n)}</button>`).join('')}</div></div>`;
+    return;
+  }
+
+  const logs = DB.mp.filter(m => m.name === p.name).sort((x, y) => y.g.idx - x.g.idx);
+  const N = DB.players.length;
+  const side = t => {
+    const r = logs.filter(m => m.team === t);
+    const w = r.filter(m => m.res === 'W').length, d = r.filter(m => m.res === 'D').length, l = r.filter(m => m.res === 'L').length;
+    return { n: r.length, w, d, l, goals: r.reduce((a, m) => a + m.goals, 0) };
+  };
+  const A = side('A'), B = side('B');
+  const tot = Math.max(1, p.w + p.d + p.l);
+  const isMine = mine === p.name;
+
+  box.innerHTML = `
+    <article class="card hero">
+      <div class="hero-name"><h2>${esc(p.name)}</h2>${isMine ? '<span class="mine">★ 내 기록</span>' : ''}</div>
+      <p class="hero-sub">승점 <b>${DB.ptsRank.get(p.name) || '-'}위</b> · 득점 <b>${p.g ? DB.goalRank.get(p.name) + '위' : '-'}</b> · 출전 선수 ${N}명 중</p>
+      <div class="tiles num">
+        <div class="tile key"><b>${p.pts}</b><span>승점</span></div>
+        <div class="tile"><b>${p.gp}</b><span>경기</span></div>
+        <div class="tile"><b>${p.g}</b><span>득점</span></div>
+        <div class="tile"><b>${p.mom}</b><span>MOM</span></div>
+        <div class="tile"><b>${pctTxt(p.wr)}</b><span>승률</span></div>
+      </div>
+      <div class="wdl">
+        <div class="bar" role="img" aria-label="${p.w}승 ${p.d}무 ${p.l}패">
+          ${p.w ? `<i class="w" style="width:${p.w/tot*100}%"></i>` : ''}${p.d ? `<i class="d" style="width:${p.d/tot*100}%"></i>` : ''}${p.l ? `<i class="l" style="width:${p.l/tot*100}%"></i>` : ''}
+        </div>
+        <div class="legend num"><span><b style="color:var(--win)">${p.w}</b> 승</span><span><b>${p.d}</b> 무</span><span><b style="color:var(--loss)">${p.l}</b> 패</span></div>
+      </div>
+      <div class="minor num">
+        <span>경기당 득점 <b>${p.gp ? (p.g / p.gp).toFixed(2) : '0'}</b></span>
+        <span>지각 <b>${p.late}</b></span>
+        <span>자책골 <b>${p.og}</b></span>
+      </div>
+    </article>
+
+    ${logs.length ? `
+    <div class="card">
+      <h3>최근 ${Math.min(5, logs.length)}경기 · 최신순</h3>
+      <div class="form">${logs.slice(0,5).map(m => `<span class="res ${m.res}" title="${esc(gLabel(m.gid))}">${RES[m.res] || '?'}</span>`).join('')}</div>
+      <div class="split">
+        <div class="side A"><div class="lab">핑크 조끼</div><div class="rec num">${A.w}승 ${A.d}무 ${A.l}패</div><div class="sm num">${A.n}경기 · ${A.goals}골 · 승률 ${pctTxt(pct(A.w, A.l))}</div></div>
+        <div class="side B"><div class="lab">블루 조끼</div><div class="rec num">${B.w}승 ${B.d}무 ${B.l}패</div><div class="sm num">${B.n}경기 · ${B.goals}골 · 승률 ${pctTxt(pct(B.w, B.l))}</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>경기별 기록 · ${logs.length}경기</h3>
+      <ul class="log">${logs.map(m => {
+        const g = m.g, d = fmtDate(g.date);
+        const mine = m.team === 'A' ? g.a : g.b, opp = m.team === 'A' ? g.b : g.a;
+        return `<li>
+          <div class="when"><b>${esc(d.short)}</b>${esc(gLabel(g.id))}</div>
+          <div class="mid"><span class="vest ${m.team}">${TEAM[m.team] || '-'}</span><span class="sc num">${mine} : ${opp}</span>
+            ${m.goals ? `<span class="badge num">${m.goals}골</span>` : ''}${m.mom ? '<span class="badge mom">MOM</span>' : ''}${m.og ? `<span class="badge warn">자책 ${m.og}</span>` : ''}${m.late ? '<span class="badge warn">지각</span>' : ''}</div>
+          <span class="res ${m.res}">${RES[m.res] || '?'}</span></li>`;
+      }).join('')}</ul>
+      ${logs.length !== p.gp ? `<p class="note" style="margin-top:10px">경기 기록 ${logs.length}건과 통계의 경기 수 ${p.gp}가 다릅니다. 시트의 이름 표기를 확인해 주세요.</p>` : ''}
+    </div>` : `<div class="card note">경기별 기록이 아직 없습니다.</div>`}`;
+}
+
+/* ===== 전체 순위 ===== */
+const COLS = [
+  { k:'rank', h:'#' }, { k:'name', h:'이름' }, { k:'gp', h:'경기' }, { k:'wdl', h:'승-무-패' },
+  { k:'g', h:'득점' }, { k:'mom', h:'MOM' }, { k:'wr', h:'승률' }, { k:'pts', h:'승점' }
+];
+function sorted(key, minGp){
+  const tb = { pts:['pts','wr','g'], g:['g','gp','pts'], wr:['wr','pts','gp'], mom:['mom','pts','g'], gp:['gp','pts','g'] }[key];
+  return DB.players.filter(p => p.gp >= minGp).sort((x, y) => {
+    for (const k of tb) { if (y[k] !== x[k]) return y[k] - x[k]; }
+    return ko(x.name, y.name);
+  });
+}
+function renderLeaders(){
+  const cards = [
+    { k:'pts', t:'승점 1위', v:p => `${p.pts}점` },
+    { k:'g', t:'득점왕', v:p => `${p.g}골` },
+    { k:'mom', t:'MOM 최다', v:p => `${p.mom}회` },
+    { k:'gp', t:'최다 출전', v:p => `${p.gp}경기` },
+    { k:'wr', t:'승률 1위 · 10경기+', v:p => pctTxt(p.wr), min:10 },
+  ];
+  $('#leaders').innerHTML = cards.map(c => {
+    const list = sorted(c.k, c.min || 1); if (!list.length) return '';
+    const top = list[0]; const ties = list.filter(p => p[c.k] === top[c.k]).length - 1;
+    return `<button class="lead" type="button" data-p="${esc(top.name)}"><div class="k">${c.t}</div><div class="n">${esc(top.name)}</div><div class="v num">${c.v(top)}${ties ? ` <span class="more">외 ${ties}명</span>` : ''}</div></button>`;
+  }).join('');
+}
+function renderRank(){
+  renderLeaders();
+  document.querySelectorAll('#sortSeg button').forEach(b => b.setAttribute('aria-pressed', b.dataset.k === state.sort));
+  $('#minGp').value = String(state.minGp);
+  const list = sorted(state.sort, state.minGp);
+  const hlKey = state.sort;
+  // 정렬 기준값으로 공동 순위
+  let prev = null, rank = 0; const ranks = list.map((p, i) => { if (p[hlKey] !== prev) { rank = i + 1; prev = p[hlKey]; } return rank; });
+  const q = state.q.toLowerCase(); const mine = store.get('wf_me');
+  $('#rankTable thead').innerHTML = `<tr>${COLS.map(c => `<th class="${c.k === hlKey ? 'hl' : ''}">${c.h}</th>`).join('')}</tr>`;
+  const body = list.map((p, i) => ({ p, r: ranks[i] })).filter(x => !q || x.p.name.toLowerCase().includes(q)).map(({ p, r }) => `
+    <tr data-p="${esc(p.name)}" class="${p.name === mine ? 'me' : ''}">
+      <td><span class="rk ${r === 1 ? 't1' : ''}">${r}</span></td>
+      <td>${esc(p.name)}${p.name === mine ? ' <span class="mine">★</span>' : ''}</td>
+      <td class="num ${hlKey==='gp'?'hl':''}">${p.gp}</td>
+      <td class="num">${p.w}-${p.d}-${p.l}</td>
+      <td class="num ${hlKey==='g'?'hl':''}">${p.g}</td>
+      <td class="num ${hlKey==='mom'?'hl':''}">${p.mom}</td>
+      <td class="num ${hlKey==='wr'?'hl':''}">${pctTxt(p.wr)}</td>
+      <td class="num ${hlKey==='pts'?'hl':''}">${p.pts}</td>
+    </tr>`).join('');
+  $('#rankTable tbody').innerHTML = body || `<tr><td colspan="8" class="empty">조건에 맞는 선수가 없습니다.</td></tr>`;
+}
+
+/* ===== 경기 결과 ===== */
+function renderGames(){
+  const G = DB.games;
+  const aw = G.filter(g => g.win === 'A').length, bw = G.filter(g => g.win === 'B').length, dr = G.length - aw - bw;
+  const goals = G.reduce((s, g) => s + g.a + g.b, 0);
+  const t = Math.max(1, G.length);
+  $('#gsum').innerHTML = `
+    <div class="sumrow"><h3>조끼 대결 전적 · ${G.length}경기</h3><span class="note num">경기당 평균 ${(goals / t).toFixed(1)}골</span></div>
+    <div class="big3 num"><span class="A">핑크 승<b>${aw}</b></span><span>무<b>${dr}</b></span><span class="B">블루 승<b>${bw}</b></span></div>
+    <div class="bar" role="img" aria-label="핑크 ${aw}승, 무 ${dr}, 블루 ${bw}승">${aw ? `<i class="a" style="width:${aw/t*100}%"></i>` : ''}${dr ? `<i class="d" style="width:${dr/t*100}%"></i>` : ''}${bw ? `<i class="b" style="width:${bw/t*100}%"></i>` : ''}</div>`;
+
+  const byGame = new Map();
+  DB.mp.forEach(m => { if (!byGame.has(m.gid)) byGame.set(m.gid, []); byGame.get(m.gid).push(m); });
+  $('#glist').innerHTML = [...G].reverse().map(g => {
+    const d = fmtDate(g.date, true); const ps = byGame.get(g.id) || [];
+    const moms = ps.filter(m => m.mom).map(m => m.name);
+    const scorers = ps.filter(m => m.goals).sort((x, y) => y.goals - x.goals).map(m => `${m.name}${m.goals > 1 ? ' ' + m.goals : ''}`);
+    const lose = s => (g.win !== 'D' && g.win !== s) ? 'lose' : '';
+    const team = s => {
+      const list = ps.filter(m => m.team === s);
+      return `<ul class="${s}"><li class="hd">${TEAM[s]} · ${list.length}명</li>${list.map(m => `<li><button type="button" data-p="${esc(m.name)}" class="${DB.members.size && !DB.members.has(m.name) ? 'guest' : ''}" ${DB.members.size && !DB.members.has(m.name) ? 'title="회원 명단에 없는 이름"' : ''}>${esc(m.name)}</button><span class="gl">${m.goals ? m.goals + '골' : ''}${m.mom ? ' MOM' : ''}</span></li>`).join('')}</ul>`;
+    };
+    return `<details class="game"><summary>
+      <div class="gmeta"><span><b>${esc(gLabel(g.id))}</b> · ${esc(d.long)}</span><span>${g.win === 'D' ? '무승부' : TEAM[g.win] + ' 승'}</span></div>
+      <div class="board">
+        <span class="t A">핑크</span>
+        <span class="digits num"><span class="${lose('A')}">${g.a}</span><i>:</i><span class="${lose('B')}">${g.b}</span></span>
+        <span class="t B">블루</span>
+      </div>
+      <div class="gfoot">${moms.length ? `<span>MOM <b>${moms.map(esc).join(', ')}</b></span>` : ''}${scorers.length ? `<span>득점 ${scorers.map(esc).join(', ')}</span>` : ''}${!ps.length ? '<span>선수 기록 없음</span>' : ''}</div>
+    </summary>${ps.length ? `<div class="lineups">${team('A')}${team('B')}</div>` : ''}</details>`;
+  }).join('');
+}
+
+/* ===== 이벤트 ===== */
+document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-p]'); if (!el) return;
+  e.preventDefault(); openPlayer(el.dataset.p);
+});
+$('#who').addEventListener('change', e => { const v = clean(e.target.value); if (v) { state.who = v; renderMe(); } });
+$('#who').addEventListener('keydown', e => { if (e.key === 'Enter') { const v = clean(e.target.value); if (v) { state.who = v; renderMe(); e.target.blur(); } } });
+$('#pin').addEventListener('click', () => {
+  if (!state.who) return;
+  store.set('wf_me', store.get('wf_me') === state.who ? null : state.who);
+  renderMe(); renderRank();
+});
+$('#sortSeg').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  state.sort = b.dataset.k;
+  if (state.sort === 'wr' && state.minGp < 10) state.minGp = 10;
+  renderRank();
+});
+$('#q').addEventListener('input', e => { state.q = clean(e.target.value); renderRank(); });
+$('#minGp').addEventListener('change', e => { state.minGp = +e.target.value; renderRank(); });
+$('#refresh').addEventListener('click', () => load(true));
+
+/* ===== 시작 ===== */
+(function start(){
+  const mine = store.get('wf_me');
+  const h = (location.hash || '').slice(1);
+  if (mine) { state.who = mine; $('#who').value = mine; }
+  setTab(['me','rank','games'].includes(h) ? h : (mine ? 'me' : 'rank'), false);
+  load(false);
+})();
+</script>
+
+</body>
+</html>
